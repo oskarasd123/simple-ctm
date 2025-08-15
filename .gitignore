@@ -1,0 +1,3 @@
+models/*.pt
+images_labels/*
+*.pyc
