@@ -14,7 +14,7 @@ steps = 2000
 neurons = 512
 batch_size = 128
 dataset_fraction = 1
-lr = 2e-3
+lr = 1e-3
 save_path = "model_ff.pt"
 
 image_extractor = ImageExtractor().cuda() # 3 channels in, 256 channels out, 16x down sampling
@@ -31,7 +31,7 @@ dense_ff.train()
 
 dense_ff[-1].weight.data *= 2
 
-dataset = CropedImagePointDataset("images_labels/", dataset_fraction, Compose([ToTensor(), Resize((64, 64))]), 0.2)
+dataset = CropedImagePointDataset("images_labels/", dataset_fraction, Compose([ToTensor(), Resize((16*4, 16*4))]), 0.1)
 
 
 

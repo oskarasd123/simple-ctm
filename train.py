@@ -1,3 +1,5 @@
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 import torch
 from torch import nn, Tensor, optim
 from dataloader import CropedImagePointDataset, ImagePointDataset
@@ -8,23 +10,24 @@ from torch.utils.data import DataLoader
 from train_utils import mapped_loss, PointMatchingLoss
 import random
 import numpy as np
-import os
+from some_utils import ExpDecay
+
 
 steps = 5000
 neurons = 512
-batch_size = 64
+batch_size = 32
 dataset_fraction = 1
 history_size = 20
 lr = 1e-3
-ticks = 40
-save_path = "model_512.pt"
+ticks = 50
+save_path = "models/model_512_3.pt"
 load_checkpoint = True
-
+print_every = 10
 
 image_extractor = ImageExtractor().cuda() # 3 channels in, 256 channels out, 16x down sampling
-image_attention = CTMImageAttention(image_extractor.out_channels, neurons, neurons).cuda()
-ctm = CTM(neurons, history_size, neurons, 1).cuda()
-output_linear = nn.Linear(neurons, 3 * 20).cuda() # output is 10 points, 10 conficence values
+image_attention = CTMImageAttention(image_extractor.out_channels, neurons, 256).cuda()
+ctm = CTM(neurons, history_size, 256, 1).cuda()
+output_linear = nn.Linear(neurons, 3 * 20).cuda()
 
 
 if load_checkpoint and os.path.exists(save_path):
@@ -33,10 +36,12 @@ if load_checkpoint and os.path.exists(save_path):
     image_attention.load_state_dict(checkpoint["image_attention"])
     ctm.load_state_dict(checkpoint["ctm"])
     output_linear.load_state_dict(checkpoint["output_linear"])
+    print("models loaded")
 else:
     load_checkpoint = False
+    image_extractor.load_state_dict(torch.load("model_ff.pt")["image_extractor"]) # starting with a pre trained image extractor is much faster
 
-dataset = CropedImagePointDataset("images_labels/", 1, Compose([ToImage(), ToDtype(torch.float, True), Resize((256, 256))]), 0.2, True)
+dataset = CropedImagePointDataset("images_labels/", 1, Compose([ToImage(), ToDtype(torch.float, True), Resize((16*25, 16*25))]), 0.3, True)
 indicies = list(range(len(dataset)))
 random.shuffle(indicies)
 
@@ -69,6 +74,11 @@ if load_checkpoint and "optimizers" in checkpoint:
     attention_optim.load_state_dict(optim_checkpoint["attention_optim"])
     ctm_optim.load_state_dict(optim_checkpoint["ctm_optim"])
     output_optim.load_state_dict(optim_checkpoint["output_optim"])
+    print("optimizer state loaded")
+
+
+smooth_loss = ExpDecay(1.4, 0.1, 3)
+smooth_accuarcy = ExpDecay(0, 0.1, 4)
 
 step = 0
 try:
@@ -112,7 +122,10 @@ try:
             output_optim.zero_grad()
             step += 1
             nr_points = (1-points[:,:,0].isnan().float()).sum()
-            print(f"epoch: {epoch} \tstep: {step} \tloss: {loss.item():.4} \tnr points: {nr_points/batch_size} \tprediction rate: {n_correct_predictions/ticks/nr_points:.3}")
+            smooth_loss.update(loss.item())
+            smooth_accuarcy.update(n_correct_predictions/ticks/nr_points)
+            if step % print_every == 0:
+                print(f"epoch: {epoch} \tstep: {step} \tloss: {smooth_loss.value:.4} \taverage points: {nr_points/batch_size:.04} \taverage prediction rate: {smooth_accuarcy.value:.3}")
 except KeyboardInterrupt:
     yes_or_no = input("save model(Y/n): ").lower() != "n"
     if yes_or_no:

@@ -6,6 +6,7 @@
 
 class ExpDecay:
     def __init__(self, initial_value : float, a : float, recursion_steps : int = 0):
+        """intrepolates using self.value = self.value * (1-self.a) + value * self.a"""
         self.a = a
         self.value = initial_value
         self.sub_decay = None
