@@ -20,14 +20,14 @@ dataset_fraction = 1
 history_size = 20
 lr = 1e-3
 ticks = 50
-save_path = "models/model_512_3.pt"
+save_path = "models/model_512.pt"
 load_checkpoint = True
 print_every = 10
 
 image_extractor = ImageExtractor().cuda() # 3 channels in, 256 channels out, 16x down sampling
 image_attention = CTMImageAttention(image_extractor.out_channels, neurons, 256).cuda()
 ctm = CTM(neurons, history_size, 256, 1).cuda()
-output_linear = nn.Linear(neurons, 3 * 20).cuda()
+output_linear = nn.Linear(neurons, 3 * 20).cuda() # output is 20 points * 3 values (x, y, logit)
 
 
 if load_checkpoint and os.path.exists(save_path):
@@ -41,7 +41,7 @@ else:
     load_checkpoint = False
     image_extractor.load_state_dict(torch.load("model_ff.pt")["image_extractor"]) # starting with a pre trained image extractor is much faster
 
-dataset = CropedImagePointDataset("images_labels/", 1, Compose([ToImage(), ToDtype(torch.float, True), Resize((16*25, 16*25))]), 0.3, True)
+dataset = CropedImagePointDataset("images_labels/", dataset_fraction, Compose([ToImage(), ToDtype(torch.float, True), Resize((16*20, 16*20))]), 0.2, True)
 indicies = list(range(len(dataset)))
 random.shuffle(indicies)
 
@@ -53,7 +53,7 @@ def collate_fn(examples : list):
         images.append(image)
         max_points = max(max_points, points.shape[0])
     for image, points in examples:
-        true_points.append(list(points) + [(float("nan"), float("nan")) for i in range(max_points - points.shape[0])])
+        true_points.append(list(points) + [(float("nan"), float("nan")) for i in range(max_points - points.shape[0])]) # pad with nan
     return torch.stack(images), torch.tensor(np.array(true_points)).cuda()
 
 
@@ -90,18 +90,18 @@ try:
                 break
             if points.shape[0] == 0:
                 continue
-            batches = images.size(0)
+            nr_batches = images.size(0)
             images = images.cuda()
             points = points.cuda()*2-1 # from 0 - 1 to -1 - 1
 
             image_features = image_extractor(images)
-            latent = ctm.reset(batches)
+            latent = ctm.reset(nr_batches)
             loss = torch.zeros((1,), device="cuda")
             n_correct_predictions = 0
             for tick in range(ticks):
                 ctm_input = image_attention(image_features, latent)
                 latent = ctm(ctm_input)
-                output : Tensor = output_linear(latent).reshape(batches, -1, 3)
+                output : Tensor = output_linear(latent).reshape(nr_batches, -1, 3)
                 tick_loss, correct_predictions = loss_fn(output, points)
                 n_correct_predictions += correct_predictions
                 loss += tick_loss * (tick/ticks)

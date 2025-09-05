@@ -1,10 +1,10 @@
 This repository is my attempt at implementing the Continuous Thought Machine (CTM) from [this](https://arxiv.org/abs/2505.05522) paper.  
-The dataset can be found at [google drive](https://drive.google.com/file/d/1ir74RtLGd_roajcRsfwugpe3IvP5oUZD/view?usp=sharing).  
+The dataset i use can be found at [google drive](https://drive.google.com/file/d/1ir74RtLGd_roajcRsfwugpe3IvP5oUZD/view?usp=sharing).  
 
 
-current models:
-  - model_512.pt: trained with pretrained feature extractor  
-  - model512_2.pt: trained without pretrained feature extractor  
-  - model512_3.pt: trained with a pretrained feature extractor and larger images  
+# current results
+When training with an rtx 3060 12GB for 4 hours the model learns to predict 2-3 points accurately but dosen't learn to "look around".
+This might be because of the short training time or simplicity of the dataset.
 
-show.py is a python script for visualiseing the predictions
+
+
